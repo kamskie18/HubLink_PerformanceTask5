@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="HubLink.Application/HubLink.Application.csproj" />
+  <Project Path="HubLink.Desktop/HubLink.Desktop.csproj" />
+  <Project Path="HubLink.Domain/HubLink.Domain.csproj" />
+  <Project Path="HubLink.Tests/HubLink.Tests.csproj" />
+</Solution>
