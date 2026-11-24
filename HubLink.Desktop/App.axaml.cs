@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using HubLink.Application.Configuration;
 using HubLink.Application.Services;
+using HubLink.Desktop.Services;
 using HubLink.Desktop.ViewModels;
 using HubLink.Desktop.Views;
 using Microsoft.Extensions.Configuration;
@@ -55,8 +56,9 @@ public partial class App : Avalonia.Application
         // HTTP Client & API Service
         services.AddHttpClient<IHubLinkApiClient, HubLinkApiClient>();
 
-        // CSV Export Service
+        // CSV Export & File Dialog Services
         services.AddSingleton<ICsvExportService, CsvExportService>();
+        services.AddSingleton<IFileDialogService, AvaloniaFileDialogService>();
 
         // ViewModels
         services.AddTransient<MainWindowViewModel>();

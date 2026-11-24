@@ -81,3 +81,15 @@ HubLink supports toggling the controlled test endpoint directly from the interfa
 - **`server-error`**: Simulates HTTP 500 internal server error.
 - **`invalid-json`**: Simulates incomplete/malformed JSON response.
 - **`delay`**: 10-second wait to exercise client-side cancellation and timeout handling.
+
+---
+
+## 5. Deliverables Included
+1. **Application Source:** Complete .NET 10 / Avalonia MVVM solution (`HubLink.Domain`, `HubLink.Application`, `HubLink.Desktop`, `HubLink.Tests`).
+2. **README:** Setup, configuration, and execution instructions (`README.md`).
+3. **Verification Checklist:** Acceptance scenario verification record (`Verification-Checklist.md`).
+4. **CSV Export Sample:** Sample output generated from `BR-001` (`Sample_Export_BR-001.csv`).
+
+## 6. Collaboration & Acknowledgment
+- **Team / Pair:** Pair Activity (add partner names before final submission).
+- **Acknowledgment:** AI-assisted development tools were used to assist with boilerplate scaffolding, unit test structuring, and documentation formatting; all architecture, integration behavior, and verification results were reviewed and validated against the local HubLink service.

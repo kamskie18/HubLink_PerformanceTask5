@@ -9,5 +9,6 @@ public interface IHubLinkApiClient
         string? branchCode = null,
         bool useTestEndpoint = false,
         string? testMode = null,
+        string? baseAddress = null,
         CancellationToken cancellationToken = default);
 }

@@ -85,4 +85,49 @@ public class HubLinkApiClientTests
         Assert.False(response.IsSuccess);
         Assert.Contains("malformed or incomplete JSON", response.ErrorMessage);
     }
+
+    [Fact]
+    public async Task GetShipmentsAsync_TestModeDelayWithShortTimeout_ReturnsTimeoutFailure()
+    {
+        // Arrange: 1-second timeout against 10-second delay endpoint
+        var shortOptions = Options.Create(new HubLinkOptions
+        {
+            BaseAddress = "http://127.0.0.1:5080",
+            BranchCode = "BR-001",
+            TimeoutSeconds = 1
+        });
+        var timeoutClient = new HubLinkApiClient(new HttpClient(), shortOptions);
+
+        // Act
+        var response = await timeoutClient.GetShipmentsAsync("BR-001", useTestEndpoint: true, testMode: "delay");
+
+        // Assert
+        Assert.False(response.IsSuccess);
+        Assert.Equal(408, response.StatusCode);
+        Assert.Contains("timed out", response.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task GetShipmentsAsync_UnreachableServer_ReturnsServiceUnavailableFailure()
+    {
+        // Act: use runtime baseAddress override pointing to unused local port
+        var response = await _client.GetShipmentsAsync("BR-001", baseAddress: "http://127.0.0.1:59999");
+
+        // Assert
+        Assert.False(response.IsSuccess);
+        Assert.Equal(503, response.StatusCode);
+        Assert.Contains("Unable to reach", response.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task GetShipmentsAsync_InvalidBaseAddress_ReturnsBadRequestFailure()
+    {
+        // Act
+        var response = await _client.GetShipmentsAsync("BR-001", baseAddress: "not-a-valid-url");
+
+        // Assert
+        Assert.False(response.IsSuccess);
+        Assert.Equal(400, response.StatusCode);
+        Assert.Contains("Invalid service base URL", response.ErrorMessage);
+    }
 }

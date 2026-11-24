@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using HubLink.Application.Configuration;
 using HubLink.Application.Models;
@@ -21,11 +20,6 @@ public class HubLinkApiClient : IHubLinkApiClient
         _httpClient = httpClient;
         _options = options.Value;
 
-        if (_httpClient.BaseAddress == null && !string.IsNullOrWhiteSpace(_options.BaseAddress))
-        {
-            _httpClient.BaseAddress = new Uri(_options.BaseAddress.TrimEnd('/') + "/");
-        }
-
         if (_options.TimeoutSeconds > 0)
         {
             _httpClient.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
@@ -36,20 +30,36 @@ public class HubLinkApiClient : IHubLinkApiClient
         string? branchCode = null,
         bool useTestEndpoint = false,
         string? testMode = null,
+        string? baseAddress = null,
         CancellationToken cancellationToken = default)
     {
-        var targetBranch = string.IsNullOrWhiteSpace(branchCode) ? _options.BranchCode : branchCode.Trim();
+        var effectiveBase = string.IsNullOrWhiteSpace(baseAddress) ? _options.BaseAddress : baseAddress.Trim();
+        if (!Uri.TryCreate(effectiveBase.TrimEnd('/') + "/", UriKind.Absolute, out var baseUri) ||
+            (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
+        {
+            return ApiResponse<BranchShipmentsResponse>.Failure(
+                $"Invalid service base URL '{effectiveBase}'. Expected an HTTP or HTTPS address (e.g. http://127.0.0.1:5080).",
+                400);
+        }
 
-        string requestUri;
+        var targetBranch = string.IsNullOrWhiteSpace(branchCode) ? _options.BranchCode : branchCode.Trim();
+        if (string.IsNullOrWhiteSpace(targetBranch))
+        {
+            return ApiResponse<BranchShipmentsResponse>.Failure("Branch code must not be empty.", 400);
+        }
+
+        string relativePath;
         if (useTestEndpoint)
         {
             var mode = string.IsNullOrWhiteSpace(testMode) ? (_options.TestMode ?? "normal") : testMode.Trim();
-            requestUri = $"api/test/shipments?branchCode={Uri.EscapeDataString(targetBranch)}&mode={Uri.EscapeDataString(mode)}";
+            relativePath = $"api/test/shipments?branchCode={Uri.EscapeDataString(targetBranch)}&mode={Uri.EscapeDataString(mode)}";
         }
         else
         {
-            requestUri = $"api/shipments?branchCode={Uri.EscapeDataString(targetBranch)}";
+            relativePath = $"api/shipments?branchCode={Uri.EscapeDataString(targetBranch)}";
         }
+
+        var requestUri = new Uri(baseUri, relativePath);
 
         try
         {
@@ -59,14 +69,17 @@ public class HubLinkApiClient : IHubLinkApiClient
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-                var errorMsg = TryExtractErrorMessage(errorBody) ?? $"Service returned HTTP {statusCode} ({response.ReasonPhrase})";
+                var errorMsg = TryExtractErrorMessage(errorBody)
+                    ?? $"Service returned HTTP {statusCode} ({response.ReasonPhrase}).";
                 return ApiResponse<BranchShipmentsResponse>.Failure(errorMsg, statusCode);
             }
 
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             if (string.IsNullOrWhiteSpace(content))
             {
-                return ApiResponse<BranchShipmentsResponse>.Failure("Service returned an empty response body.", statusCode);
+                return ApiResponse<BranchShipmentsResponse>.Failure(
+                    "Service returned an empty response body instead of shipment JSON.",
+                    statusCode);
             }
 
             BranchShipmentsResponse? result;
@@ -76,30 +89,44 @@ public class HubLinkApiClient : IHubLinkApiClient
             }
             catch (JsonException ex)
             {
-                return ApiResponse<BranchShipmentsResponse>.Failure($"Unable to interpret service response: malformed or incomplete JSON. {ex.Message}", statusCode);
+                return ApiResponse<BranchShipmentsResponse>.Failure(
+                    $"Unable to interpret service response: malformed or incomplete JSON. ({ex.Message})",
+                    statusCode);
             }
 
-            if (result == null)
+            if (result == null || string.IsNullOrWhiteSpace(result.BranchCode))
             {
-                return ApiResponse<BranchShipmentsResponse>.Failure("Parsed response was null.", statusCode);
+                return ApiResponse<BranchShipmentsResponse>.Failure(
+                    "Service response could not be interpreted as valid branch shipment data.",
+                    statusCode);
             }
 
-            bool isEmpty = result.Shipments == null || result.Shipments.Count == 0;
             result.Shipments ??= new List<Shipment>();
+            bool isEmpty = result.Shipments.Count == 0;
 
             return ApiResponse<BranchShipmentsResponse>.Success(result, statusCode, isEmpty);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return ApiResponse<BranchShipmentsResponse>.Failure("The request to the logistics service timed out.", 408);
+            return ApiResponse<BranchShipmentsResponse>.Failure("Shipment retrieval was cancelled by the user.", 499);
+        }
+        catch (OperationCanceledException)
+        {
+            return ApiResponse<BranchShipmentsResponse>.Failure(
+                $"The request to {effectiveBase} timed out after {_httpClient.Timeout.TotalSeconds:0} seconds.",
+                408);
         }
         catch (HttpRequestException ex)
         {
-            return ApiResponse<BranchShipmentsResponse>.Failure($"Unable to connect to the external logistics service: {ex.Message}", 503);
+            return ApiResponse<BranchShipmentsResponse>.Failure(
+                $"Unable to reach the logistics service at {effectiveBase}: {ex.Message}",
+                503);
         }
         catch (Exception ex)
         {
-            return ApiResponse<BranchShipmentsResponse>.Failure($"An unexpected error occurred during service retrieval: {ex.Message}", 500);
+            return ApiResponse<BranchShipmentsResponse>.Failure(
+                $"Unexpected error during retrieval: {ex.Message}",
+                500);
         }
     }
 
@@ -120,7 +147,7 @@ public class HubLinkApiClient : IHubLinkApiClient
         }
         catch
         {
-            // not valid JSON, ignore and return null
+            // Ignore non-JSON error bodies
         }
         return null;
     }
