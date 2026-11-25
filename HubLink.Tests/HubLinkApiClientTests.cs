@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text;
 using HubLink.Application.Configuration;
 using HubLink.Application.Services;
 using Microsoft.Extensions.Options;
@@ -7,43 +9,67 @@ namespace HubLink.Tests;
 
 public class HubLinkApiClientTests
 {
-    private readonly HubLinkApiClient _client;
-
-    public HubLinkApiClientTests()
+    private static HubLinkApiClient CreateClient(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler, int timeoutSeconds = 5)
     {
         var options = Options.Create(new HubLinkOptions
         {
             BaseAddress = "http://127.0.0.1:5080",
             BranchCode = "BR-001",
-            TimeoutSeconds = 5
+            TimeoutSeconds = timeoutSeconds
         });
 
-        var httpClient = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:5080/") };
-        _client = new HubLinkApiClient(httpClient, options);
+        var httpClient = new HttpClient(new StubHttpMessageHandler(handler));
+        return new HubLinkApiClient(httpClient, options);
     }
 
     [Fact]
     public async Task GetShipmentsAsync_NormalBranchBR001_Returns5Items()
     {
-        // Act
-        var response = await _client.GetShipmentsAsync("BR-001");
+        var json = """
+        {
+          "branchCode": "BR-001",
+          "shipments": [
+            {"trackingNumber":"HUB-1001","branchCode":"BR-001","origin":"Cagayan de Oro","destination":"Valencia","status":"InTransit","lastUpdatedUtc":"2026-11-10T08:30:00Z"},
+            {"trackingNumber":"HUB-1002","branchCode":"BR-001","origin":"Iligan","destination":"Malaybalay","status":"Pending","lastUpdatedUtc":"2026-11-09T13:15:00Z"},
+            {"trackingNumber":"HUB-1003","branchCode":"BR-001","origin":"Valencia","destination":"Cagayan de Oro","status":"Delivered","lastUpdatedUtc":"2026-11-08T06:45:00Z"},
+            {"trackingNumber":"HUB-1004","branchCode":"BR-001","origin":"Butuan, Agusan del Norte","destination":"Depot \"North\"","status":"Exception","lastUpdatedUtc":"2026-11-07T09:00:00Z"},
+            {"trackingNumber":"HUB-1005","branchCode":"BR-001","origin":"Manolo Fortich","destination":"Valencia","status":"InTransit","lastUpdatedUtc":"2026-11-06T12:00:00Z"}
+          ]
+        }
+        """;
 
-        // Assert
+        Uri? capturedUri = null;
+        var client = CreateClient((req, _) =>
+        {
+            capturedUri = req.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            });
+        });
+
+        var response = await client.GetShipmentsAsync("BR-001");
+
         Assert.True(response.IsSuccess);
         Assert.Equal(200, response.StatusCode);
         Assert.False(response.IsEmpty);
         Assert.NotNull(response.Data);
         Assert.Equal("BR-001", response.Data.BranchCode);
         Assert.Equal(5, response.Data.Shipments.Count);
+        Assert.Equal("http://127.0.0.1:5080/api/shipments?branchCode=BR-001", capturedUri?.ToString());
     }
 
     [Fact]
     public async Task GetShipmentsAsync_ValidEmptyBranchBR999_ReturnsEmptySuccess()
     {
-        // Act
-        var response = await _client.GetShipmentsAsync("BR-999");
+        var json = """{"branchCode":"BR-999","shipments":[]}""";
+        var client = CreateClient((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        }));
 
-        // Assert (OR-07: A successful response containing no shipments must be treated as an empty result rather than a failure)
+        var response = await client.GetShipmentsAsync("BR-999");
+
         Assert.True(response.IsSuccess);
         Assert.Equal(200, response.StatusCode);
         Assert.True(response.IsEmpty);
@@ -54,10 +80,13 @@ public class HubLinkApiClientTests
     [Fact]
     public async Task GetShipmentsAsync_TestModeBadRequest_ReturnsFailure()
     {
-        // Act
-        var response = await _client.GetShipmentsAsync("BR-001", useTestEndpoint: true, testMode: "bad-request");
+        var client = CreateClient((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("""{"error":"Simulated bad request."}""", Encoding.UTF8, "application/json")
+        }));
 
-        // Assert
+        var response = await client.GetShipmentsAsync("BR-001", useTestEndpoint: true, testMode: "bad-request");
+
         Assert.False(response.IsSuccess);
         Assert.Equal(400, response.StatusCode);
         Assert.Contains("Simulated bad request", response.ErrorMessage);
@@ -66,10 +95,13 @@ public class HubLinkApiClientTests
     [Fact]
     public async Task GetShipmentsAsync_TestModeServerError_ReturnsFailure()
     {
-        // Act
-        var response = await _client.GetShipmentsAsync("BR-001", useTestEndpoint: true, testMode: "server-error");
+        var client = CreateClient((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)
+        {
+            Content = new StringContent("""{"error":"Simulated server error."}""", Encoding.UTF8, "application/json")
+        }));
 
-        // Assert
+        var response = await client.GetShipmentsAsync("BR-001", useTestEndpoint: true, testMode: "server-error");
+
         Assert.False(response.IsSuccess);
         Assert.Equal(500, response.StatusCode);
         Assert.Contains("Simulated server error", response.ErrorMessage);
@@ -78,10 +110,13 @@ public class HubLinkApiClientTests
     [Fact]
     public async Task GetShipmentsAsync_TestModeInvalidJson_ReturnsMalformedJsonFailure()
     {
-        // Act
-        var response = await _client.GetShipmentsAsync("BR-001", useTestEndpoint: true, testMode: "invalid-json");
+        var client = CreateClient((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"branchCode":"BR-001","shipments":[{"trackingNumber":""", Encoding.UTF8, "application/json")
+        }));
 
-        // Assert
+        var response = await client.GetShipmentsAsync("BR-001", useTestEndpoint: true, testMode: "invalid-json");
+
         Assert.False(response.IsSuccess);
         Assert.Contains("malformed or incomplete JSON", response.ErrorMessage);
     }
@@ -89,19 +124,14 @@ public class HubLinkApiClientTests
     [Fact]
     public async Task GetShipmentsAsync_TestModeDelayWithShortTimeout_ReturnsTimeoutFailure()
     {
-        // Arrange: 1-second timeout against 10-second delay endpoint
-        var shortOptions = Options.Create(new HubLinkOptions
+        var client = CreateClient(async (_, ct) =>
         {
-            BaseAddress = "http://127.0.0.1:5080",
-            BranchCode = "BR-001",
-            TimeoutSeconds = 1
-        });
-        var timeoutClient = new HubLinkApiClient(new HttpClient(), shortOptions);
+            await Task.Delay(TimeSpan.FromSeconds(10), ct);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }, timeoutSeconds: 1);
 
-        // Act
-        var response = await timeoutClient.GetShipmentsAsync("BR-001", useTestEndpoint: true, testMode: "delay");
+        var response = await client.GetShipmentsAsync("BR-001", useTestEndpoint: true, testMode: "delay");
 
-        // Assert
         Assert.False(response.IsSuccess);
         Assert.Equal(408, response.StatusCode);
         Assert.Contains("timed out", response.ErrorMessage);
@@ -110,10 +140,10 @@ public class HubLinkApiClientTests
     [Fact]
     public async Task GetShipmentsAsync_UnreachableServer_ReturnsServiceUnavailableFailure()
     {
-        // Act: use runtime baseAddress override pointing to unused local port
-        var response = await _client.GetShipmentsAsync("BR-001", baseAddress: "http://127.0.0.1:59999");
+        var client = CreateClient((_, _) => throw new HttpRequestException("Connection refused"));
 
-        // Assert
+        var response = await client.GetShipmentsAsync("BR-001", baseAddress: "http://127.0.0.1:59999");
+
         Assert.False(response.IsSuccess);
         Assert.Equal(503, response.StatusCode);
         Assert.Contains("Unable to reach", response.ErrorMessage);
@@ -122,12 +152,25 @@ public class HubLinkApiClientTests
     [Fact]
     public async Task GetShipmentsAsync_InvalidBaseAddress_ReturnsBadRequestFailure()
     {
-        // Act
-        var response = await _client.GetShipmentsAsync("BR-001", baseAddress: "not-a-valid-url");
+        var client = CreateClient((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)));
 
-        // Assert
+        var response = await client.GetShipmentsAsync("BR-001", baseAddress: "not-a-valid-url");
+
         Assert.False(response.IsSuccess);
         Assert.Equal(400, response.StatusCode);
         Assert.Contains("Invalid service base URL", response.ErrorMessage);
+    }
+
+    private sealed class StubHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;
+
+        public StubHttpMessageHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
+        {
+            _handler = handler;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => _handler(request, cancellationToken);
     }
 }
