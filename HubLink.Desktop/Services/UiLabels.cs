@@ -1,0 +1,86 @@
+namespace HubLink.Desktop.Services;
+
+public sealed record UiLabels(
+    string Subtitle,
+    string FetchButton,
+    string CancelButton,
+    string ExportButton,
+    string RetryButton,
+    string ServiceUrlLabel,
+    string BranchCodeLabel,
+    string UseTestEndpointLabel,
+    string TestModeLabel,
+    string TotalLabel,
+    string PendingLabel,
+    string InTransitLabel,
+    string DeliveredLabel,
+    string ExceptionLabel,
+    string StatusFilterLabel,
+    string LanguageLabel,
+    string EmptyTitle,
+    string ReadyMessage)
+{
+    public static UiLabels For(string language) => language switch
+    {
+        "Bisaya" => new UiLabels(
+            Subtitle: "Rehiyonal nga Sistema sa Pagsubay ug Pagreport sa mga Kargamento",
+            FetchButton: "Kuhaa / I-refresh",
+            CancelButton: "Kanselahon",
+            ExportButton: "I-export sa CSV",
+            RetryButton: "Sulayi Pag-usab",
+            ServiceUrlLabel: "Address sa Serbisyo",
+            BranchCodeLabel: "Kodigo sa Sangay",
+            UseTestEndpointLabel: "Gamita ang Test Endpoint",
+            TestModeLabel: "Test Mode",
+            TotalLabel: "TANAN NGA KARGAMENTO",
+            PendingLabel: "NAGHULAT (PENDING)",
+            InTransitLabel: "NAGBYAHE (IN TRANSIT)",
+            DeliveredLabel: "NAHATOD NA (DELIVERED)",
+            ExceptionLabel: "MAY PROBLEMA (EXCEPTION)",
+            StatusFilterLabel: "Salain pinaagi sa Status:",
+            LanguageLabel: "Pinulongan:",
+            EmptyTitle: "Walay Nakit-an nga Kargamento",
+            ReadyMessage: "Andam na. I-klik ang 'Kuhaa / I-refresh' aron makuha ang mga rekord sa sangay."
+        ),
+        "Tagalog" => new UiLabels(
+            Subtitle: "Panrehiyong Sistema sa Pagsubaybay at Pag-uulat ng mga Padala",
+            FetchButton: "Kunin / I-refresh",
+            CancelButton: "Kanselahin",
+            ExportButton: "I-export sa CSV",
+            RetryButton: "Subukan Muli",
+            ServiceUrlLabel: "Address ng Serbisyo",
+            BranchCodeLabel: "Kodigo ng Sangay",
+            UseTestEndpointLabel: "Gamitin ang Test Endpoint",
+            TestModeLabel: "Test Mode",
+            TotalLabel: "KABUUANG PADALA",
+            PendingLabel: "NAKAPILA (PENDING)",
+            InTransitLabel: "NASA BIYAHE (IN TRANSIT)",
+            DeliveredLabel: "NAIHATID NA (DELIVERED)",
+            ExceptionLabel: "MAY ABERYA (EXCEPTION)",
+            StatusFilterLabel: "Salain ayon sa Status:",
+            LanguageLabel: "Wika:",
+            EmptyTitle: "Walang Naipakitang Padala",
+            ReadyMessage: "Handa na. I-click ang 'Kunin / I-refresh' upang makuha ang mga rekord ng sangay."
+        ),
+        _ => new UiLabels(
+            Subtitle: "Regional Centralized Shipment Tracking & Reporting",
+            FetchButton: "Fetch Shipments",
+            CancelButton: "Cancel",
+            ExportButton: "Export CSV",
+            RetryButton: "Retry Request",
+            ServiceUrlLabel: "Service Base URL",
+            BranchCodeLabel: "Branch Code",
+            UseTestEndpointLabel: "Use Test Endpoint",
+            TestModeLabel: "Test Mode",
+            TotalLabel: "TOTAL SHIPMENTS",
+            PendingLabel: "PENDING",
+            InTransitLabel: "IN TRANSIT",
+            DeliveredLabel: "DELIVERED",
+            ExceptionLabel: "EXCEPTION",
+            StatusFilterLabel: "Status Filter:",
+            LanguageLabel: "Language:",
+            EmptyTitle: "No Shipments Displayed",
+            ReadyMessage: "Ready. Click 'Fetch Shipments' to retrieve branch records."
+        )
+    };
+}

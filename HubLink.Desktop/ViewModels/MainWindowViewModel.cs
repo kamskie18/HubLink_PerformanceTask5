@@ -70,6 +70,27 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private ShipmentSummary _summary = new();
 
+    [ObservableProperty]
+    private string _selectedLanguage = "English";
+
+    [ObservableProperty]
+    private UiLabels _labels = UiLabels.For("English");
+
+    public List<string> Languages { get; } = new()
+    {
+        "English",
+        "Bisaya",
+        "Tagalog"
+    };
+
+    public List<string> BranchPresets { get; } = new()
+    {
+        "BR-001",
+        "BR-002",
+        "BR-003",
+        "BR-999"
+    };
+
     public bool ShowEmptyState => !IsLoading && DisplayedShipments.Count == 0;
 
     public ObservableCollection<Shipment> DisplayedShipments { get; } = new();
@@ -116,6 +137,23 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnSelectedFilterChanged(string value)
     {
         ApplyFilter();
+    }
+
+    partial void OnSelectedLanguageChanged(string value)
+    {
+        Labels = UiLabels.For(value);
+        if (!_hasLoadedOnce && !IsError && !IsLoading)
+        {
+            StatusMessage = Labels.ReadyMessage;
+        }
+    }
+
+    [RelayCommand]
+    public async Task SelectBranchAsync(string branch)
+    {
+        if (IsLoading || string.IsNullOrWhiteSpace(branch)) return;
+        BranchCode = branch;
+        await FetchShipmentsAsync();
     }
 
     [RelayCommand]
